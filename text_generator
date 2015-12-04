@@ -1,0 +1,113 @@
+import os
+import random
+import pickle
+
+
+end_of_line = ['.', '!', '?']
+special_words = ['however', 'moreover', 'therefore', 'thus', 'furthermore']
+special_words_start = []
+for element in special_words:
+    special_words_start.append(element.upper())
+
+
+def read_lines(dir_path):
+    files = os.listdir(dir_path)
+    for book in files:
+        if book.endswith('.txt'):
+            book_path = os.path.join(dir_path, book)
+            with open(book_path) as data:
+                for line in data:
+                    yield line.replace('-', ' ').translate(None, ',:;"#%^&*[]()\'')
+
+
+def read_words(lines):
+    for line in lines:
+        for word in line.split( ):
+            yield word
+
+
+def generate_words_triplets(words):
+    first, second = '*', '*'
+    for word in words:
+        if second == '*':
+            if word != 'I':
+                third = word.lower()
+        else:  # if not I and the beginning of sentence - keep capitalized
+            third = word
+        yield first, second, third
+        if third[-1] in end_of_line:
+            yield second, third, '*'
+            yield third, '*', '*'
+            first, second = '*', '*'
+        else:
+            first, second = second, third
+
+
+def count_frequencies(dir_path):
+    text_lines = read_lines(dir_path)
+    words = read_words(text_lines)
+    triplets = generate_words_triplets(words)
+    words_probabilities = {}
+    for first, second, third in triplets:
+        if (first, second) in words_probabilities:
+            words_probabilities[first, second].append(third)
+        else:
+            words_probabilities[first, second] = [third]
+    wordlistfile = "D:/corp/wordlist.pkl"
+    words_file = open(wordlistfile, 'wb')
+    pickle.dump(words_probabilities, words_file)
+    words_file.close()
+    del words_probabilities
+    return wordlistfile
+
+
+def generate_text(frequencies_file):
+    file_freq = open(frequencies_file, 'rb')
+    stored_list = pickle.load(file_freq)
+    file_freq.close()
+    shuffled_text = []
+    words_count = 0
+    end_sentences = []
+    while words_count < 10000:
+        number_of_sentences = random.randint(3, 20)
+        sentence_count = 0
+        while sentence_count < number_of_sentences:
+            first, second = '*', '*'
+            third = random.choice(stored_list[first, second])
+            start = words_count
+            while third != '*':
+                shuffled_text.append(third)
+                words_count += 1
+                second, third = third, random.choice(stored_list[second, third])
+            if shuffled_text[start] not in '*':
+                shuffled_text[start] = shuffled_text[start][0].upper() + shuffled_text[start][1:]
+            sentence_count += 1
+        end_sentences.append(words_count)
+    shuffled_text.insert(0, '\t')
+    count_tabs = 1
+    for i in end_sentences:
+        shuffled_text.insert(i+count_tabs, '\n\t')
+        count_tabs += 1
+    return shuffled_text
+
+
+def add_punctuation(shuffled_words):
+    for i, word in enumerate(shuffled_words):
+        if word == 'but':
+            shuffled_words[i-1] += ','
+        elif word in special_words:
+            shuffled_words[i-1] += ';'
+            shuffled_words[i] += ','
+        elif word in special_words_start:
+            shuffled_words[i] += ','
+    return shuffled_words
+
+
+stat_file = count_frequencies('D:/corp')
+text = generate_text(stat_file)
+text_with_punctuation = add_punctuation(text)
+new_article = ' '.join(text_with_punctuation)
+
+f = open('article.txt', 'w')
+f.write(new_article)
+f.close()
